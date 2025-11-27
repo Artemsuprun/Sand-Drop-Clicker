@@ -14,7 +14,10 @@ use std::{
     collections::HashSet,
     time::Duration
 };
-use ggegui::{egui, Gui};
+use ggegui::{
+    Gui,
+    egui::{self, Button}
+};
 use ggez::{
 	ContextBuilder, Context, GameResult, glam,
 	event::{ self, EventHandler }, 
@@ -60,34 +63,41 @@ impl GameState {
     // loads the options window
     fn options_gui(&mut self) {
         let gui_ctx = self.gui.ctx();
-        egui::Window::new("Options").show(&gui_ctx, |ui| {
-            // Display instructions
-			ui.label("Click the button to earn money!");
-			if ui.button("Convert").clicked() {
-				self.game.make_money();
-			}
-            // display money
-            ui.label(format!("Money: {}", self.game.money));
-
-            // show available upgrades
-            ui.separator();
-            if self.unlock.is_empty() {
-                ui.label("No upgrades available yet. Keep clicking!");
-            } else {
-                ui.label("Available Upgrades:");
-            }
-            for upgrade in Upgrade::iter() {
-                let goal = upgrade.unlock_cost();
-                let cost = self.game.upgrade_cost(upgrade);
-                if self.unlock.contains(&upgrade) {
-                    if ui.button(format!("{}", upgrade.button_text())).clicked() {
-                        // fix sanddropclicker.cost and add logic here
-                    }
-                } else if self.game.money >= goal {
-                    self.unlock.insert(upgrade);
+        egui::Window::new("Options")
+            .resizable(false)
+            .default_size([250.0, 100.0])
+            .default_pos([10.0, 100.0])
+            .show(&gui_ctx, |ui| {
+                // Display instructions
+                ui.label("Click the button to earn money!");
+                if ui.button("Convert").clicked() {
+                    self.game.make_money();
                 }
-            }
-		});
+                // display money
+                ui.label(format!("Money: {}$", self.game.money));
+
+                // show available upgrades
+                ui.separator();
+                if self.unlock.is_empty() {
+                    ui.label("No upgrades available yet. Keep clicking!");
+                } else {
+                    ui.label("Available Upgrades:");
+                }
+                for upgrade in Upgrade::iter() {
+                    let cost = self.game.upgrade_cost(upgrade);
+                    if self.unlock.contains(&upgrade) {
+                        let mut enabled: bool = !self.game.is_maxed(upgrade);
+                        enabled = enabled && (self.game.money >= cost);
+                        let btn_txt = format!("{}: {}$",upgrade.btn_txt(), cost);
+                        ui.label(upgrade.desc());
+                        if ui.add_enabled(enabled, Button::new(btn_txt)).clicked() {
+                            self.game.buy(upgrade)
+                        }
+                    } else if self.game.money >= cost {
+                        self.unlock.insert(upgrade);
+                    }
+                }
+		    });
     }
 }
 
@@ -163,7 +173,7 @@ impl EventHandler for GameState {
 }
 
 struct SandDropClicker {
-    money: f64,
+    money: i64,
     particles: HashMap<SandParticle, Vec<Grain>>,
     upgrades: HashMap<Upgrade, u32>,
     total_clicks: u32,
@@ -172,10 +182,13 @@ struct SandDropClicker {
 
 impl SandDropClicker {
     fn new() -> Self {
+        let mut upgrades = HashMap::new();
+        upgrades.insert(Upgrade::ParticleUpgrade, 1);
+        upgrades.insert(Upgrade::BiggerContainer, 1);
         SandDropClicker {
-            money: 0.0,
+            money: 0,
             particles: HashMap::new(),
-            upgrades: HashMap::new(),
+            upgrades: upgrades,
             total_clicks: 0,
             total_time: Duration::new(0, 0),
         }
@@ -198,7 +211,7 @@ impl SandDropClicker {
         self.total_time += Duration::from_secs_f32(seconds);
 
         // update the position of the falling particles.
-        for (_, grains) in self.particles.iter_mut() {
+        for grains in self.particles.values_mut() {
             for grain in grains.iter_mut() {
                 grain.logic();
             }
@@ -230,19 +243,14 @@ impl SandDropClicker {
     // converts sand particles to money
     fn make_money(&mut self) {
         // sell all sand particles for money
-        let mut earned = 0.0;
+        let mut earned = 0;
         for (particle, grains) in self.particles.iter_mut() {
-            let count = grains.len() as f64;
+            let count = grains.len() as i64;
             let value = particle.value();
             earned += count * value;
             grains.clear();
         }
         self.money += earned;
-    }
-
-    fn upgrade_cost(&self, upgrade: Upgrade) -> i64 {
-        100 // Placeholder cost logic
-        // base_cost * 1.1^M
     }
 
     fn is_full(&self) -> bool {
@@ -255,16 +263,15 @@ impl SandDropClicker {
     fn get_size(&self) -> u32{
         // base container size
         let base_size = 25;
-        let mut container_size = base_size;
-        // some logic later
+        let upgrade = self.upgrades.get(&Upgrade::BiggerContainer).unwrap_or(&0);
 
-        container_size
+        base_size * upgrade
     }
 
     fn get_amount(&self) -> u32 {
         // count the amount of particles in the container
         let mut amount = 0;
-        for (_, grains) in self.particles.iter() {
+        for grains in self.particles.values() {
             amount += grains.len() as u32;
         }
         amount
@@ -299,8 +306,39 @@ impl SandDropClicker {
         );
     }
 
+    fn upgrade_cost(&self, upgrade: Upgrade) -> i64 {
+        // Placeholder cost logic
+        // base_cost * 1.1^M
+        let n = *self.upgrades.get(&upgrade).unwrap_or(&0);
+        let cost: f64 = upgrade.cost(n);
+        cost.round() as i64
+    }
+
     fn rand_sand(&self) -> SandParticle {
         SandParticle::Sand
+    }
+
+    fn buy(&mut self, upgrade: Upgrade) {
+        let cost = self.upgrade_cost(upgrade);
+        if self.money >= cost {
+            self.money -= cost;
+            self.upgrades.entry(upgrade)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        }
+    }
+
+    // returns the boolean result
+    fn is_maxed(&self, upgrade: Upgrade) -> bool {
+        if upgrade == Upgrade::ParticleUpgrade {
+            match self.upgrades.get(&upgrade) {
+                Some(num) => SandParticle::is_last(*num),
+                None =>      false,
+            }
+        } else {
+            // other upgrades don't have a limit.
+            false
+        }
     }
 }
 
@@ -313,16 +351,7 @@ enum Upgrade {
 }
 
 impl Upgrade {
-    fn unlock_cost(&self) -> f64 {
-        match self {
-            Upgrade::BiggerContainer => 50.0,
-            Upgrade::ParticleUpgrade => 75.0,
-            Upgrade::MoreParticles =>   100.0,
-            Upgrade::AutoClicker =>     250.0,
-        }
-    }
-
-    fn button_text(&self) -> &'static str {
+    fn btn_txt(&self) -> &str {
         match self {
             Upgrade::BiggerContainer => "Buy Bigger Container",
             Upgrade::ParticleUpgrade => "Improve Sand Quality",
@@ -330,9 +359,39 @@ impl Upgrade {
             Upgrade::AutoClicker =>     "Buy Auto Clicker",
         }
     }
+
+    // Descripts the upgrade
+    fn desc(&self) -> &str {
+        match self {
+            Upgrade::BiggerContainer => "This will increase your container size:",
+            Upgrade::ParticleUpgrade => "This will allow you to drop better sand:",
+            Upgrade::MoreParticles =>   "This will allow you to drop more sand per click:",
+            Upgrade::AutoClicker =>     "This will drop sand for you:",
+        }
+    }
+
+    fn cost(&self, n: u32) -> f64 {
+        // formula: upgrade_base_cost * 1.1^m
+        let m: f64 = n as f64;
+        let base_m: f64 = 1.1; 
+
+        // get the base cost depending on the upgrade type
+        let base_cost: f64 = match self {
+            Upgrade::BiggerContainer => 50.0,
+            Upgrade::ParticleUpgrade => SandParticle::cost(n) as f64,
+            Upgrade::MoreParticles =>   200.0,
+            Upgrade::AutoClicker =>     500.0,
+        };
+
+        if *self == Upgrade::ParticleUpgrade {
+            base_cost
+        } else {
+            base_cost * base_m.powf(m)
+        }
+    }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, PartialEq, Debug, EnumIter)]
 enum SandParticle {
     Sand,
     Quartz,
@@ -349,20 +408,20 @@ enum SandParticle {
 }
 
 impl SandParticle {
-    fn value(&self) -> f64 {
+    fn value(&self) -> i64 {
         match self {
-            SandParticle::Sand =>       1.0,
-            SandParticle::Quartz =>     1.0,
-            SandParticle::Shell =>      1.0,
-            SandParticle::Coral =>      1.0,
-            SandParticle::Pinksand =>   1.0,
-            SandParticle::Volcanic =>   1.0,
-            SandParticle::Glauconite => 1.0,
-            SandParticle::Gemstones =>  1.0,
-            SandParticle::Iron =>       1.0,
-            SandParticle::Starsand =>   1.0,
-            SandParticle::Gold =>       1.0,
-            SandParticle::Diamond =>    1.0,
+            SandParticle::Sand =>       1,
+            SandParticle::Quartz =>     1,
+            SandParticle::Shell =>      1,
+            SandParticle::Coral =>      1,
+            SandParticle::Pinksand =>   1,
+            SandParticle::Volcanic =>   1,
+            SandParticle::Glauconite => 1,
+            SandParticle::Gemstones =>  1,
+            SandParticle::Iron =>       1,
+            SandParticle::Starsand =>   1,
+            SandParticle::Gold =>       1,
+            SandParticle::Diamond =>    1,
         }
     }
 
@@ -382,11 +441,54 @@ impl SandParticle {
             SandParticle::Diamond =>    Color::from_rgb(243, 213, 103),
         }
     }
+
+    fn is_last(num: u32) -> bool {
+        if let Some(last) = SandParticle::iter().last() {
+            num >= last as u32
+        } else {
+            false
+        }
+    }
+
+    fn cost(num: u32) -> i64 {
+        let particle = SandParticle::from_u32(num).unwrap();
+        match particle {
+            SandParticle::Sand =>       0,
+            SandParticle::Quartz =>     100,
+            SandParticle::Shell =>      300,
+            SandParticle::Coral =>      1000,
+            SandParticle::Pinksand =>   2000,
+            SandParticle::Volcanic =>   6000,
+            SandParticle::Glauconite => 12000,
+            SandParticle::Gemstones =>  24000,
+            SandParticle::Iron =>       50000,
+            SandParticle::Starsand =>   100000,
+            SandParticle::Gold =>       1000000,
+            SandParticle::Diamond =>    10000000,
+        }
+    }
+
+    fn from_u32(num: u32) -> Option<Self> {
+        match num {
+            0 =>  Some(SandParticle::Sand),
+            1 =>  Some(SandParticle::Quartz),
+            2 =>  Some(SandParticle::Shell),
+            3 =>  Some(SandParticle::Coral),
+            4 =>  Some(SandParticle::Pinksand),
+            5 =>  Some(SandParticle::Volcanic),
+            6 =>  Some(SandParticle::Glauconite),
+            7 =>  Some(SandParticle::Gemstones),
+            8 =>  Some(SandParticle::Iron),
+            9 =>  Some(SandParticle::Starsand),
+            10 => Some(SandParticle::Gold),
+            11 => Some(SandParticle::Diamond),
+            _  => None,
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Grain {
-    //rect: graphics::Rect,
     x: f32,
     y: f32,
     size: f32,
