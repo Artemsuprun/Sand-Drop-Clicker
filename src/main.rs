@@ -16,49 +16,82 @@ use std::{
 };
 use ggegui::{
     Gui,
-    egui::{self, Button}
+    egui::{ self, Button }
 };
 use ggez::{
-	ContextBuilder, Context, GameResult, glam,
+	ContextBuilder, Context, GameResult,
 	event::{ self, EventHandler }, 
-	graphics::{ self, DrawParam, Color, Text },
-    input::keyboard::{KeyCode, KeyMods, KeyInput}
+	graphics::{ self, DrawParam, Color, Text, Rect, Mesh },
+    input::keyboard::{ KeyCode, KeyMods, KeyInput }
 };
 use strum_macros::EnumIter;
 use strum::IntoEnumIterator;
 
 // Global Variable
-const FPS: u32 = 30;
+const FPS: u32 = 60;
+const SCREEN_SIZE: (f32, f32) = (800.0, 600.0);
+const GRAIN_SIZE: f32 = 20.0;
 
 // Set up and run the game
 fn main() {
 	let (mut ctx, event_loop) = ContextBuilder::new("SandDropClicker", "Artem Suprun")
         .window_setup(ggez::conf::WindowSetup::default().title("Sand Drop Clicker"))
-        .window_mode(ggez::conf::WindowMode::default().dimensions(800.0, 600.0))
+        .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_SIZE.0, SCREEN_SIZE.1))
         .build()
         .unwrap();
-	let state = GameState::new(&mut ctx);
+	let state = SandDropClicker::new(&mut ctx);
 	event::run(ctx, event_loop, state);
 }
 
 // Main game state
 // holds the game logic and GUI
-struct GameState {
-    game: SandDropClicker,
-	gui: Gui,
+struct SandDropClicker {
+    money: i64,
+    particles: HashMap<SandParticle, Vec<Grain>>,
+    upgrades: HashMap<Upgrade, u32>,
+    total_clicks: u32,
+    total_time: std::time::Duration,
     unlock: HashSet<Upgrade>,
     show_info: bool,
+    // needed for the GUI
+    gui: Gui,
+    // needed for the graphics of the game: grains
+    shared_mesh: Mesh,
 }
 
-impl GameState {
-	pub fn new(ctx: &mut Context) -> Self {
-		Self {
-            game: SandDropClicker::new(),
-			gui: Gui::new(ctx),
+impl SandDropClicker {
+    pub fn new(ctx: &mut Context) -> Self {
+        // provide the game with the default upgrades
+        let mut upgrades = HashMap::new();
+        upgrades.insert(Upgrade::ParticleUpgrade, 1);
+        upgrades.insert(Upgrade::BiggerContainer, 1);
+        upgrades.insert(Upgrade::MoreParticles, 1);
+        // create a shared mesh for the grains
+        let rect = Rect::new(
+            0.0,
+            0.0,
+            1.0,
+            1.0
+        );
+        let square = Mesh::new_rectangle(
+            ctx,
+            graphics::DrawMode::fill(),
+            rect,
+            Color::WHITE,
+        ).unwrap();
+        // create the game with default settings
+        Self {
+            money: 0,
+            particles: HashMap::new(),
+            upgrades: upgrades,
+            total_clicks: 0,
+            total_time: Duration::new(0, 0),
+            gui: Gui::new(ctx),
             unlock: HashSet::new(),
             show_info: false,
-		}
-	}
+            shared_mesh: square,
+        }
+    }
 
     // loads the options window
     fn options_gui(&mut self) {
@@ -71,10 +104,10 @@ impl GameState {
                 // Display instructions
                 ui.label("Click the button to earn money!");
                 if ui.button("Convert").clicked() {
-                    self.game.make_money();
+                    self.make_money();
                 }
                 // display money
-                ui.label(format!("Money: {}$", self.game.money));
+                ui.label(format!("Money: {}$", self.money));
 
                 // show available upgrades
                 ui.separator();
@@ -84,138 +117,20 @@ impl GameState {
                     ui.label("Available Upgrades:");
                 }
                 for upgrade in Upgrade::iter() {
-                    let cost = self.game.upgrade_cost(upgrade);
+                    let cost = self.upgrade_cost(upgrade);
                     if self.unlock.contains(&upgrade) {
-                        let mut enabled: bool = !self.game.is_maxed(upgrade);
-                        enabled = enabled && (self.game.money >= cost);
+                        let mut enabled: bool = !self.is_maxed(upgrade);
+                        enabled = enabled && (self.money >= cost);
                         let btn_txt = format!("{}: {}$",upgrade.btn_txt(), cost);
                         ui.label(upgrade.desc());
                         if ui.add_enabled(enabled, Button::new(btn_txt)).clicked() {
-                            self.game.buy(upgrade)
+                            self.buy(upgrade)
                         }
-                    } else if self.game.money >= cost {
+                    } else if self.money >= cost {
                         self.unlock.insert(upgrade);
                     }
                 }
 		    });
-    }
-}
-
-impl EventHandler for GameState {
-	fn update(&mut self, ctx: &mut Context) -> GameResult {
-        // set up a fixed timestep
-        while ctx.time.check_update_time(FPS) {
-            let seconds = 1.0 / FPS as f32;
-            self.game.update(seconds);
-        }
-        self.options_gui();
-		self.gui.update(ctx);
-		Ok(())
-	}
-
-    // draw the game state
-	fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        // clear the screen
-		let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
-		
-        // draw the GUI and game
-        self.game.draw(ctx, &mut canvas);
-        canvas.draw(&self.gui, DrawParam::default());
-
-        // draw game info
-        if self.show_info {
-            self.game.player_info(&mut canvas);
-        }
-
-        // finish drawing
-        canvas.finish(ctx).unwrap();
-        Ok(())
-	}
-
-    // handle mouse clicks
-    // if the pointer is over the GUI, ignore the click
-    // otherwise, drop a grain of sand.
-    fn mouse_button_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        button: event::MouseButton,
-        x: f32,
-        y: f32,
-    ) -> Result<(), ggez::GameError> {
-        // Ignore clicks if the pointer is over the GUI or the container is full
-        if !self.gui.ctx().wants_pointer_input() && self.game.is_full() {
-            self.game.add_grain(x, y);
-        }
-        Ok(())
-    }
-
-    fn key_down_event(
-        &mut self,
-        ctx: &mut Context,
-        input: KeyInput,
-        _repeat: bool
-    ) -> GameResult {
-        match input.keycode {
-            Some(KeyCode::I) => {
-                if input.mods.contains(KeyMods::CTRL) {
-                    self.show_info = !self.show_info;
-                }
-            }
-            Some(KeyCode::Q) => {
-                if input.mods.contains(KeyMods::CTRL) {
-                    ctx.request_quit();
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }   
-}
-
-struct SandDropClicker {
-    money: i64,
-    particles: HashMap<SandParticle, Vec<Grain>>,
-    upgrades: HashMap<Upgrade, u32>,
-    total_clicks: u32,
-    total_time: std::time::Duration,
-}
-
-impl SandDropClicker {
-    fn new() -> Self {
-        let mut upgrades = HashMap::new();
-        upgrades.insert(Upgrade::ParticleUpgrade, 1);
-        upgrades.insert(Upgrade::BiggerContainer, 1);
-        SandDropClicker {
-            money: 0,
-            particles: HashMap::new(),
-            upgrades: upgrades,
-            total_clicks: 0,
-            total_time: Duration::new(0, 0),
-        }
-    }
-
-    fn draw(&self, ctx: &mut Context, canvas: &mut graphics::Canvas) {
-        // draw the grain particle
-        for (_, grains) in self.particles.iter() {
-            for grain in grains.iter() {
-                grain.draw(canvas);
-            }
-        }
-
-        // draw the player stat
-        self.game_info(canvas);
-    }
-
-    fn update(&mut self, seconds: f32) {
-        // update the total_time stat
-        self.total_time += Duration::from_secs_f32(seconds);
-
-        // update the position of the falling particles.
-        for grains in self.particles.values_mut() {
-            for grain in grains.iter_mut() {
-                grain.logic();
-            }
-        }
     }
 
     // simulates dropping a sand particle
@@ -223,21 +138,30 @@ impl SandDropClicker {
         // increment total clicks
         self.total_clicks += 1;
 
-        // add a sand particle at (x, y)
-        let sand = self.rand_sand();
-        let size = 5.0;
-        let grain = Grain {
-            x: x,
-            y: y,
-            size: size,
-            a: 0.0,
-            particle: sand,
-        };
-        // Add the grain to the specific particle location.
-        self.particles
-            .entry(SandParticle::Sand)
-            .or_insert_with(Vec::new)
-            .push(grain);
+        // for multiple grains spawning
+        let amount = *self.upgrades.get(&Upgrade::MoreParticles).unwrap_or(&1);
+        // variable to track how many grains have been added
+        let mut i: u32 = 0;
+        let container_size = self.get_size();
+        let current_amount = self.get_amount();
+        while i < amount {
+            // check if gain can fit in container
+            if current_amount + i >= container_size {
+                break;
+            }
+
+            // add a sand particle at (x, y)
+            let sand = self.rand_sand();
+            let size = GRAIN_SIZE;
+            let grain = Grain::new(x, y, size, sand);
+            // Add the grain to the specific particle location.
+            self.particles
+                .entry(sand)
+                .or_insert_with(Vec::new)
+                .push(grain);
+            
+            i += 1;
+        }
     }
 
     // converts sand particles to money
@@ -257,13 +181,14 @@ impl SandDropClicker {
         // container size
         let size = self.get_size();
         let amount = self.get_amount();
-        size > amount
+        amount >= size
     }
 
     fn get_size(&self) -> u32{
         // base container size
         let base_size = 25;
-        let upgrade = self.upgrades.get(&Upgrade::BiggerContainer).unwrap_or(&0);
+        // amount of upgrades for bigger container.
+        let upgrade = *self.upgrades.get(&Upgrade::BiggerContainer).unwrap_or(&1);
 
         base_size * upgrade
     }
@@ -307,8 +232,6 @@ impl SandDropClicker {
     }
 
     fn upgrade_cost(&self, upgrade: Upgrade) -> i64 {
-        // Placeholder cost logic
-        // base_cost * 1.1^M
         let n = *self.upgrades.get(&upgrade).unwrap_or(&0);
         let cost: f64 = upgrade.cost(n);
         cost.round() as i64
@@ -340,6 +263,98 @@ impl SandDropClicker {
             false
         }
     }
+}
+
+impl EventHandler for SandDropClicker {
+	fn update(&mut self, ctx: &mut Context) -> GameResult {
+        // set up a fixed timestep
+        while ctx.time.check_update_time(FPS) {
+            let seconds = 1.0 / FPS as f32;
+            // update the total_time stat
+            self.total_time += Duration::from_secs_f32(seconds);
+
+            // update the position of the falling particles.
+            for grains in self.particles.values_mut() {
+                for grain in grains.iter_mut() {
+                    grain.update(seconds);
+                }
+            }
+        }
+        
+        self.options_gui();
+		self.gui.update(ctx);
+		Ok(())
+	}
+
+    // draw the game state
+	fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        // clear the screen
+		let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
+		
+        // draw the grain particle
+        for grains in self.particles.values() {
+            for grain in grains.iter() {
+                canvas.draw(
+                    &self.shared_mesh,
+                    grain.draw_params()
+                );
+            }
+        }
+
+        // draw the player stat
+        self.game_info(&mut canvas);
+
+        // draw the gui
+        canvas.draw(&self.gui, DrawParam::default());
+
+        // draw game info
+        if self.show_info {
+            self.player_info(&mut canvas);
+        }
+
+        // finish drawing
+        canvas.finish(ctx).unwrap();
+        Ok(())
+	}
+
+    // handle mouse clicks
+    // if the pointer is over the GUI, ignore the click
+    // otherwise, drop a grain of sand.
+    fn mouse_button_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        _button: event::MouseButton,
+        x: f32,
+        y: f32,
+    ) -> Result<(), ggez::GameError> {
+        // Ignore clicks if the pointer is over the GUI or the container is full
+        if !self.gui.ctx().wants_pointer_input() && !self.is_full() {
+            self.add_grain(x, y);
+        }
+        Ok(())
+    }
+
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        input: KeyInput,
+        _repeat: bool
+    ) -> GameResult {
+        match input.keycode {
+            Some(KeyCode::I) => {
+                if input.mods.contains(KeyMods::CTRL) {
+                    self.show_info = !self.show_info;
+                }
+            }
+            Some(KeyCode::Q) => {
+                if input.mods.contains(KeyMods::CTRL) {
+                    ctx.request_quit();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }   
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, EnumIter, Clone, Copy)]
@@ -391,7 +406,7 @@ impl Upgrade {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Hash, Eq, PartialEq, Debug, EnumIter, Clone, Copy)]
 enum SandParticle {
     Sand,
     Quartz,
@@ -489,42 +504,69 @@ impl SandParticle {
 
 #[derive(Debug)]
 struct Grain {
-    x: f32,
-    y: f32,
-    size: f32,
-    a: f32,
-    particle: SandParticle,
+    rect: Rect,
+    rotation: f32,
+    color: Color,
+    x_v: f32,
+    y_v: f32,
 }
 
 impl Grain {
-    fn point(&self) -> glam::Vec2 {
-        glam::Vec2 {
-            x: self.x,
-            y: self.y,
-        }
-    }
-
-    fn size(&self) -> glam::Vec2 {
-        glam::Vec2 {
-            x: self.size,
-            y: self.size,
-        }
-    }
-
-    fn logic(&mut self) {
-        self.y += 3.0;
-    }
-
-    fn draw(&self, canvas: &mut graphics::Canvas) {
-        let color = self.particle.color();
-        canvas.draw(
-            &graphics::Quad, 
-            graphics::DrawParam::new()
-                .dest(self.point())
-                .rotation(self.a)
-                .offset(glam::Vec2::new(0.5, 0.5))
-                .scale(self.size())
-                .color(color),
+    fn new(x: f32, y: f32, size: f32, sand: SandParticle) -> Self {
+        let color = sand.color();
+        let rect = Rect::new(
+            x - size / 2.0,
+            y - size / 2.0,
+            size,
+            size
         );
+
+        Self {
+            rect: rect,
+            rotation: 0.0,
+            color: color,
+            x_v: 0.0,
+            y_v: 50.0,
+        }
+    }
+
+    fn center(&self) -> [f32;2] {
+        [
+            self.rect.x + self.rect.w / 2.0,
+            self.rect.y + self.rect.h / 2.0
+        ]
+    }
+
+    fn point(&self) -> [f32;2] {
+        [
+            self.rect.x,
+            self.rect.y
+        ]
+    }
+
+    fn size(&self) -> [f32;2] {
+        [
+            self.rect.w,
+            self.rect.h
+        ]
+    }
+
+    fn update(&mut self, dt: f32) {
+        // move the grain downwards
+        self.rect.translate([0.0, self.y_v * dt]);
+
+        if self.rect.bottom() >= SCREEN_SIZE.1 {
+            self.rect.y = SCREEN_SIZE.1 - self.rect.h;
+            self.y_v = 0.0;
+        }
+    }
+
+    fn draw_params(&self) -> DrawParam {
+        DrawParam::default()
+            .dest(self.center())
+            .rotation(self.rotation)
+            .scale(self.size())
+            .offset([0.5, 0.5])
+            .color(self.color)
     }
 }
