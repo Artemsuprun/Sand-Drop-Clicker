@@ -1,5 +1,5 @@
 //  Sand-Drop-Clicker
-//  
+//
 //  Description:
 //      A simple clicker game where you drop sand particles.
 //
@@ -10,28 +10,24 @@
 
 // Needed imports
 // standard library for data structures and time handling
-use std::{
-    collections::HashMap,
-    collections::HashSet,
-    time::Duration
-};
+use std::{collections::HashMap, collections::HashSet, time::Duration};
 // rand for random number generation
 use rand::Rng;
 // ggegui for GUI handling
 use ggegui::{
     Gui,
-    egui::{ self, Button }
+    egui::{self, Button},
 };
 // ggez for game framework
 use ggez::{
-	ContextBuilder, Context, GameResult,
-	event::{ self, EventHandler }, 
-	graphics::{ self, DrawParam, Color, Text, Rect, Image, InstanceArray },
-    input::keyboard::{ KeyCode, KeyMods, KeyInput }
+    Context, ContextBuilder, GameResult,
+    event::{self, EventHandler},
+    graphics::{self, Color, DrawParam, Image, InstanceArray, Rect, Text},
+    input::keyboard::{KeyCode, KeyInput, KeyMods},
 };
 // strum for enum iteration
-use strum_macros::EnumIter;
 use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 // Global Variable
 const FPS: u32 = 30; // Frames per second
@@ -41,13 +37,13 @@ const GRAVITY: f32 = 300.0; // Gravity affecting the grains
 
 // Set up and run the game
 fn main() {
-	let (mut ctx, event_loop) = ContextBuilder::new("SandDropClicker", "Artem Suprun")
+    let (mut ctx, event_loop) = ContextBuilder::new("SandDropClicker", "Artem Suprun")
         .window_setup(ggez::conf::WindowSetup::default().title("Sand Drop Clicker"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_SIZE.0, SCREEN_SIZE.1))
         .build()
         .unwrap();
-	let state = SandDropClicker::new(&mut ctx);
-	event::run(ctx, event_loop, state);
+    let state = SandDropClicker::new(&mut ctx);
+    event::run(ctx, event_loop, state);
 }
 
 // Main game state
@@ -71,24 +67,24 @@ impl SandDropClicker {
     // creates a new game state
     pub fn new(ctx: &mut Context) -> Self {
         // provide the game with the default upgrades
-        let mut upgrades = HashMap::new();
-        upgrades.insert(Upgrade::ParticleUpgrade, 1); // start with basic sand
+        let mut upgrades_map = HashMap::new();
+        upgrades_map.insert(Upgrade::ParticleTier, 1); // start with basic sand
         // create a shared mesh for the grains
         let square = Image::from_color(ctx, 1, 1, Some(Color::WHITE));
-        let batch = InstanceArray::new(ctx, square);
+        let batch_array = InstanceArray::new(ctx, square);
         // create the game with default settings
         Self {
             money: 0,
             particles: HashMap::new(),
             grains: Vec::new(),
-            upgrades: upgrades,
+            upgrades: upgrades_map,
             total_clicks: 0,
             total_time: Duration::new(0, 0),
             unlock: HashSet::new(),
             show_info: false,
             autoclicker_timer: 0.0,
             gui: Gui::new(ctx),
-            batch: batch,
+            batch: batch_array,
         }
     }
 
@@ -122,21 +118,20 @@ impl SandDropClicker {
                         let amount = *self.upgrades.get(&upgrade).unwrap_or(&0);
                         if !self.is_maxed(upgrade) {
                             let enabled: bool = self.money >= cost;
-                            let btn_txt = format!("{} ({}): {}$", 
-                                upgrade.btn_txt(), amount, cost);
+                            let btn_txt = format!("{} ({}): {}$", upgrade.btn_txt(), amount, cost);
                             if ui.add_enabled(enabled, Button::new(btn_txt)).clicked() {
                                 self.buy(upgrade)
                             }
                         } else {
-                            let btn_txt = format!("{} ({}): (MAX LEVEL)", 
-                                upgrade.btn_txt(), amount);
+                            let btn_txt =
+                                format!("{} ({}): (MAX LEVEL)", upgrade.btn_txt(), amount);
                             ui.add_enabled(false, Button::new(btn_txt));
                         }
                     } else if self.money >= cost {
                         self.unlock.insert(upgrade);
                     }
                 }
-		    });
+            });
     }
 
     // simulates dropping a sand particle
@@ -158,7 +153,7 @@ impl SandDropClicker {
                 new_x = (x + offset_x).clamp(0.0, SCREEN_SIZE.0);
                 new_y = y + offset_y;
             }
-            
+
             // check if gain can fit in container
             if current_amount + i >= container_size {
                 break;
@@ -169,11 +164,12 @@ impl SandDropClicker {
             let size = GRAIN_SIZE;
             let grain = Grain::new(new_x, new_y, size, sand.color());
             // Add the grain to the specific particle location.
-            self.particles.entry(sand)
+            self.particles
+                .entry(sand)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
             self.grains.push(grain);
-            
+
             i += 1;
         }
     }
@@ -220,7 +216,7 @@ impl SandDropClicker {
     }
 
     // returns the size of the container
-    fn get_size(&self) -> u32{
+    fn get_size(&self) -> u32 {
         // base container size
         let base_size = 25;
         // amount of upgrades for bigger container.
@@ -240,30 +236,19 @@ impl SandDropClicker {
         let money = self.money;
         let size = self.get_size();
         let amount = self.get_amount();
-        let txt = Text::new(
-            format!("{}/{}\n{}$", amount, size, money)
-        );
-        canvas.draw(
-            &txt,
-            DrawParam::from([10.0, 10.0])
-                .color(Color::WHITE),
-        );
+        let txt = Text::new(format!("{}/{}\n{}$", amount, size, money));
+        canvas.draw(&txt, DrawParam::from([10.0, 10.0]).color(Color::WHITE));
     }
 
     // draws the player info on the screen
-    fn player_info(&self, canvas: &mut graphics::Canvas) { 
+    fn player_info(&self, canvas: &mut graphics::Canvas) {
         let total_time = self.total_time.as_secs();
         let total_clicks = self.total_clicks;
-        let txt = Text::new(
-            format!("Total Time: {} seconds \nTotal Clicks: {}", 
-                total_time, 
-                total_clicks)
-        );
-        canvas.draw(
-            &txt,
-            DrawParam::from([10.0, 50.0])
-                .color(Color::WHITE),
-        );
+        let txt = Text::new(format!(
+            "Total Time: {} seconds \nTotal Clicks: {}",
+            total_time, total_clicks
+        ));
+        canvas.draw(&txt, DrawParam::from([10.0, 50.0]).color(Color::WHITE));
     }
 
     // returns the cost of the upgrade
@@ -275,7 +260,7 @@ impl SandDropClicker {
 
     // returns a random sand particle based on the current upgrade level
     fn rand_sand(&self) -> SandParticle {
-        let level = *self.upgrades.get(&Upgrade::ParticleUpgrade).unwrap_or(&0);
+        let level = *self.upgrades.get(&Upgrade::ParticleTier).unwrap_or(&0);
         let sand_level = rand::random::<u32>() % (level);
         SandParticle::from_u32(sand_level).unwrap_or(SandParticle::Sand)
     }
@@ -285,7 +270,8 @@ impl SandDropClicker {
         let cost = self.upgrade_cost(upgrade);
         if self.money >= cost && !self.is_maxed(upgrade) {
             self.money -= cost;
-            self.upgrades.entry(upgrade)
+            self.upgrades
+                .entry(upgrade)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
         }
@@ -305,7 +291,7 @@ impl SandDropClicker {
 
 impl EventHandler for SandDropClicker {
     // update the game state
-	fn update(&mut self, ctx: &mut Context) -> GameResult {
+    fn update(&mut self, ctx: &mut Context) -> GameResult {
         // set up a fixed timestep for the physics of the grains
         while ctx.time.check_update_time(FPS) {
             let seconds = 1.0 / FPS as f32;
@@ -326,18 +312,18 @@ impl EventHandler for SandDropClicker {
 
             // TODO: collision between grains
         }
-        
+
         // update the GUI
         self.options_gui();
-		self.gui.update(ctx);
-		Ok(())
-	}
+        self.gui.update(ctx);
+        Ok(())
+    }
 
     // draw the game state
-	fn draw(&mut self, ctx: &mut Context) -> GameResult {
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // clear the screen
-		let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
-		
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
+
         // draw the grain particles
         self.batch.clear();
         if self.batch.capacity() < self.grains.len() {
@@ -366,7 +352,7 @@ impl EventHandler for SandDropClicker {
         // finish drawing
         canvas.finish(ctx).unwrap();
         Ok(())
-	}
+    }
 
     // handle mouse clicks
     // if the pointer is over the GUI, ignore the click
@@ -390,12 +376,7 @@ impl EventHandler for SandDropClicker {
     // handle key down events
     // Ctrl+I to toggle info display
     // Ctrl+Q to quit the game
-    fn key_down_event(
-        &mut self,
-        ctx: &mut Context,
-        input: KeyInput,
-        _repeat: bool
-    ) -> GameResult {
+    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         match input.keycode {
             Some(KeyCode::I) => {
                 if input.mods.contains(KeyMods::CTRL) {
@@ -410,13 +391,13 @@ impl EventHandler for SandDropClicker {
             _ => {}
         }
         Ok(())
-    }   
+    }
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, EnumIter, Clone, Copy)]
 enum Upgrade {
     BiggerContainer, // Adds more container space.
-    ParticleUpgrade, // Provides more diverse sand particles, that differ in price.
+    ParticleTier,    // Provides more diverse sand particles, that differ in price.
     MoreParticles,   // Produce more sand particles per click.
     AutoClicker,     // Introduce an autoclicker, upgrades increase the clicking frequency.
 }
@@ -426,9 +407,9 @@ impl Upgrade {
     fn btn_txt(&self) -> &str {
         match self {
             Upgrade::BiggerContainer => "Buy Bigger Container",
-            Upgrade::ParticleUpgrade => "Improve Sand Quality",
-            Upgrade::MoreParticles =>   "Buy More Particles",
-            Upgrade::AutoClicker =>     "Buy Auto Clicker",
+            Upgrade::ParticleTier => "Improve Sand Quality",
+            Upgrade::MoreParticles => "Buy More Particles",
+            Upgrade::AutoClicker => "Buy Auto Clicker",
         }
     }
 
@@ -436,9 +417,9 @@ impl Upgrade {
     fn desc(&self) -> &str {
         match self {
             Upgrade::BiggerContainer => "This will increase your container size:",
-            Upgrade::ParticleUpgrade => "This will allow you a chances to drop better sand:",
-            Upgrade::MoreParticles =>   "This will allow you to drop more sand per click:",
-            Upgrade::AutoClicker =>     "This will drop sand for you:",
+            Upgrade::ParticleTier => "This will allow you a chances to drop better sand:",
+            Upgrade::MoreParticles => "This will allow you to drop more sand per click:",
+            Upgrade::AutoClicker => "This will drop sand for you:",
         }
     }
 
@@ -446,17 +427,17 @@ impl Upgrade {
     fn cost(&self, n: u32) -> f64 {
         // formula: upgrade_base_cost * 1.1^m
         let m: f64 = n as f64;
-        let base_m: f64 = 1.1; 
+        let base_m: f64 = 1.1;
 
         // get the base cost depending on the upgrade type
         let base_cost: f64 = match self {
             Upgrade::BiggerContainer => 50.0,
-            Upgrade::ParticleUpgrade => SandParticle::cost(n) as f64,
-            Upgrade::MoreParticles =>   200.0,
-            Upgrade::AutoClicker =>     500.0,
+            Upgrade::ParticleTier => SandParticle::cost(n) as f64,
+            Upgrade::MoreParticles => 200.0,
+            Upgrade::AutoClicker => 500.0,
         };
 
-        if *self == Upgrade::ParticleUpgrade {
+        if *self == Upgrade::ParticleTier {
             base_cost
         } else {
             base_cost * base_m.powf(m)
@@ -466,8 +447,8 @@ impl Upgrade {
     // returns the maximum level of the upgrade, if any
     fn max_level(&self) -> Option<u32> {
         match self {
-            Upgrade::ParticleUpgrade => Some(SandParticle::max_level()),
-            Upgrade::AutoClicker =>     Some(100),
+            Upgrade::ParticleTier => Some(SandParticle::max_level()),
+            Upgrade::AutoClicker => Some(100),
             _ => None, // no limit for other upgrades
         }
     }
@@ -493,36 +474,36 @@ impl SandParticle {
     // returns the value of the sand particle
     fn value(&self) -> i64 {
         match self {
-            SandParticle::Sand =>       1,
-            SandParticle::Quartz =>     2,
-            SandParticle::Shell =>      4,
-            SandParticle::Coral =>      8,
-            SandParticle::Pinksand =>   16,
-            SandParticle::Volcanic =>   32,
+            SandParticle::Sand => 1,
+            SandParticle::Quartz => 2,
+            SandParticle::Shell => 4,
+            SandParticle::Coral => 8,
+            SandParticle::Pinksand => 16,
+            SandParticle::Volcanic => 32,
             SandParticle::Glauconite => 64,
-            SandParticle::Gemstones =>  128,
-            SandParticle::Iron =>       256,
-            SandParticle::Starsand =>   512,
-            SandParticle::Gold =>       1024,
-            SandParticle::Diamond =>    2048,
+            SandParticle::Gemstones => 128,
+            SandParticle::Iron => 256,
+            SandParticle::Starsand => 512,
+            SandParticle::Gold => 1024,
+            SandParticle::Diamond => 2048,
         }
     }
 
     // returns the color of the sand particle
     fn color(&self) -> Color {
         match self {
-            SandParticle::Sand =>       Color::from_rgb(243, 213, 103),
-            SandParticle::Quartz =>     Color::from_rgb(169,170,171),
-            SandParticle::Shell =>      Color::from_rgb(255, 241, 231),
-            SandParticle::Coral =>      Color::from_rgb(248, 131, 121),
-            SandParticle::Pinksand =>   Color::from_rgb(246, 196, 193),
-            SandParticle::Volcanic =>   Color::from_rgb(162, 151, 158),
+            SandParticle::Sand => Color::from_rgb(243, 213, 103),
+            SandParticle::Quartz => Color::from_rgb(169, 170, 171),
+            SandParticle::Shell => Color::from_rgb(255, 241, 231),
+            SandParticle::Coral => Color::from_rgb(248, 131, 121),
+            SandParticle::Pinksand => Color::from_rgb(246, 196, 193),
+            SandParticle::Volcanic => Color::from_rgb(162, 151, 158),
             SandParticle::Glauconite => Color::from_rgb(46, 111, 64),
-            SandParticle::Gemstones =>  Color::from_rgb(153, 102, 204),
-            SandParticle::Iron =>       Color::from_rgb(133, 81, 65),
-            SandParticle::Starsand =>   Color::from_rgb(255, 250, 134),
-            SandParticle::Gold =>       Color::from_rgb(211, 175, 55),
-            SandParticle::Diamond =>    Color::from_rgb(154, 197, 219),
+            SandParticle::Gemstones => Color::from_rgb(153, 102, 204),
+            SandParticle::Iron => Color::from_rgb(133, 81, 65),
+            SandParticle::Starsand => Color::from_rgb(255, 250, 134),
+            SandParticle::Gold => Color::from_rgb(211, 175, 55),
+            SandParticle::Diamond => Color::from_rgb(154, 197, 219),
         }
     }
 
@@ -530,21 +511,19 @@ impl SandParticle {
     fn cost(num: u32) -> i64 {
         let particle = SandParticle::from_u32(num);
         match particle {
-            Some(particle) => {
-                match particle {
-                    SandParticle::Sand =>       0,
-                    SandParticle::Quartz =>     100,
-                    SandParticle::Shell =>      300,
-                    SandParticle::Coral =>      1000,
-                    SandParticle::Pinksand =>   2000,
-                    SandParticle::Volcanic =>   6000,
-                    SandParticle::Glauconite => 12000,
-                    SandParticle::Gemstones =>  24000,
-                    SandParticle::Iron =>       50000,
-                    SandParticle::Starsand =>   100000,
-                    SandParticle::Gold =>       1000000,
-                    SandParticle::Diamond =>    10000000,
-                }
+            Some(particle) => match particle {
+                SandParticle::Sand => 0,
+                SandParticle::Quartz => 100,
+                SandParticle::Shell => 300,
+                SandParticle::Coral => 1000,
+                SandParticle::Pinksand => 2000,
+                SandParticle::Volcanic => 6000,
+                SandParticle::Glauconite => 12000,
+                SandParticle::Gemstones => 24000,
+                SandParticle::Iron => 50000,
+                SandParticle::Starsand => 100000,
+                SandParticle::Gold => 1000000,
+                SandParticle::Diamond => 10000000,
             },
             None => 0,
         }
@@ -553,19 +532,19 @@ impl SandParticle {
     // returns the sand particle from its level number
     fn from_u32(num: u32) -> Option<Self> {
         match num {
-            0 =>  Some(SandParticle::Sand),
-            1 =>  Some(SandParticle::Quartz),
-            2 =>  Some(SandParticle::Shell),
-            3 =>  Some(SandParticle::Coral),
-            4 =>  Some(SandParticle::Pinksand),
-            5 =>  Some(SandParticle::Volcanic),
-            6 =>  Some(SandParticle::Glauconite),
-            7 =>  Some(SandParticle::Gemstones),
-            8 =>  Some(SandParticle::Iron),
-            9 =>  Some(SandParticle::Starsand),
+            0 => Some(SandParticle::Sand),
+            1 => Some(SandParticle::Quartz),
+            2 => Some(SandParticle::Shell),
+            3 => Some(SandParticle::Coral),
+            4 => Some(SandParticle::Pinksand),
+            5 => Some(SandParticle::Volcanic),
+            6 => Some(SandParticle::Glauconite),
+            7 => Some(SandParticle::Gemstones),
+            8 => Some(SandParticle::Iron),
+            9 => Some(SandParticle::Starsand),
             10 => Some(SandParticle::Gold),
             11 => Some(SandParticle::Diamond),
-            _  => None,
+            _ => None,
         }
     }
 
@@ -587,38 +566,17 @@ struct Grain {
 
 impl Grain {
     // creates a new grain of sand
-    fn new(x: f32, y: f32, size: f32, color: Color) -> Self {
-        let rect = Rect::new(
-            x - size / 2.0,
-            y - size / 2.0,
-            size,
-            size
-        );
+    fn new(x: f32, y: f32, size: f32, rgb: Color) -> Self {
+        let grain_rect = Rect::new(x - size / 2.0, y - size / 2.0, size, size);
 
         Self {
-            rect: rect,
-            color: color,
+            rect: grain_rect,
+            color: rgb,
             rotation: 0.0,
             r_v: 3.0,
             y_v: 0.0,
             y_a: 0.0,
         }
-    }
-
-    // returns the center point of the grain
-    fn center(&self) -> [f32;2] {
-        [
-            self.rect.x + self.rect.w / 2.0,
-            self.rect.y + self.rect.h / 2.0
-        ]
-    }
-    
-    // returns the size of the grain
-    fn size(&self) -> [f32;2] {
-        [
-            self.rect.w,
-            self.rect.h
-        ]
     }
 
     // returns true if the grain is done (on the ground)
@@ -649,9 +607,9 @@ impl Grain {
     // returns the draw parameters for the grain
     fn draw_params(&self) -> DrawParam {
         DrawParam::default()
-            .dest(self.center())
+            .dest(self.rect.center())
             .rotation(self.rotation)
-            .scale(self.size())
+            .scale(self.rect.size())
             .offset([0.5, 0.5])
             .color(self.color)
     }
