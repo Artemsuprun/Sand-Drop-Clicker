@@ -299,7 +299,7 @@ impl EventHandler for SandDropClicker {
             self.total_time += Duration::from_secs_f32(seconds);
 
             // update the position of the falling particles.
-            for grain in self.grains.iter_mut() {
+            for grain in &mut self.grains {
                 // skip updating if the grain is done
                 if grain.is_done() {
                     continue;
@@ -398,8 +398,8 @@ impl EventHandler for SandDropClicker {
 enum Upgrade {
     BiggerContainer, // Adds more container space.
     ParticleTier,    // Provides more diverse sand particles, that differ in price.
-    MoreParticles,   // Produce more sand particles per click.
     AutoClicker,     // Introduce an autoclicker, upgrades increase the clicking frequency.
+    MoreParticles,   // Produce more sand particles per click.
 }
 
 impl Upgrade {
@@ -408,8 +408,8 @@ impl Upgrade {
         match self {
             Upgrade::BiggerContainer => "Buy Bigger Container",
             Upgrade::ParticleTier => "Improve Sand Quality",
-            Upgrade::MoreParticles => "Buy More Particles",
             Upgrade::AutoClicker => "Buy Auto Clicker",
+            Upgrade::MoreParticles => "Buy More Particles",
         }
     }
 
@@ -418,8 +418,8 @@ impl Upgrade {
         match self {
             Upgrade::BiggerContainer => "This will increase your container size:",
             Upgrade::ParticleTier => "This will allow you a chances to drop better sand:",
-            Upgrade::MoreParticles => "This will allow you to drop more sand per click:",
             Upgrade::AutoClicker => "This will drop sand for you:",
+            Upgrade::MoreParticles => "This will allow you to drop more sand per click:",
         }
     }
 
@@ -433,8 +433,8 @@ impl Upgrade {
         let base_cost: f64 = match self {
             Upgrade::BiggerContainer => 50.0,
             Upgrade::ParticleTier => SandParticle::cost(n) as f64,
-            Upgrade::MoreParticles => 200.0,
-            Upgrade::AutoClicker => 500.0,
+            Upgrade::AutoClicker => 700.0,
+            Upgrade::MoreParticles => 1000.0,
         };
 
         if *self == Upgrade::ParticleTier {
@@ -449,6 +449,7 @@ impl Upgrade {
         match self {
             Upgrade::ParticleTier => Some(SandParticle::max_level()),
             Upgrade::AutoClicker => Some(100),
+            Upgrade::MoreParticles => Some(50),
             _ => None, // no limit for other upgrades
         }
     }
@@ -514,15 +515,15 @@ impl SandParticle {
             Some(particle) => match particle {
                 SandParticle::Sand => 0,
                 SandParticle::Quartz => 100,
-                SandParticle::Shell => 300,
-                SandParticle::Coral => 1000,
-                SandParticle::Pinksand => 2000,
-                SandParticle::Volcanic => 6000,
-                SandParticle::Glauconite => 12000,
-                SandParticle::Gemstones => 24000,
-                SandParticle::Iron => 50000,
-                SandParticle::Starsand => 100000,
-                SandParticle::Gold => 1000000,
+                SandParticle::Shell => 500,
+                SandParticle::Coral => 2000,
+                SandParticle::Pinksand => 8000,
+                SandParticle::Volcanic => 10000,
+                SandParticle::Glauconite => 50000,
+                SandParticle::Gemstones => 100000,
+                SandParticle::Iron => 500000,
+                SandParticle::Starsand => 1000000,
+                SandParticle::Gold => 5000000,
                 SandParticle::Diamond => 10000000,
             },
             None => 0,
