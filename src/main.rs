@@ -93,9 +93,9 @@ struct SandDropClicker {
     unlock: HashSet<Upgrade>,
     show_info: bool,
     autoclicker_timer: f32,
-    gui: Gui,
+    gui: Option<Gui>,
     // needed for the graphics of the game: grains
-    batch: InstanceArray,
+    batch: Option<InstanceArray>,
 }
 
 /// Implementation of the game logic and GUI handling
@@ -123,58 +123,82 @@ impl SandDropClicker {
             unlock: HashSet::new(),
             show_info: false,
             autoclicker_timer: 0.0,
-            gui: Gui::new(ctx),
-            batch: batch_array,
+            gui: Some(Gui::new(ctx)),
+            batch: Some(batch_array),
+        }
+    }
+
+    /// creates a game state for testing
+    pub fn _test_state() -> Self {
+        // provide the game with the default upgrades
+        let mut upgrades_map = HashMap::new();
+        upgrades_map.insert(Upgrade::ParticleTier, 1); // start with basic sand
+        // create the game with default settings
+        Self {
+            money: 0,
+            particles: HashMap::new(),
+            grains: Vec::new(),
+            upgrades: upgrades_map,
+            total_clicks: 0,
+            total_time: Duration::new(0, 0),
+            unlock: HashSet::new(),
+            show_info: false,
+            autoclicker_timer: 0.0,
+            gui: None,
+            batch: None,
         }
     }
 
     /// updates the options GUI
     /// displays money, upgrades, and instructions
     fn options_gui(&mut self) {
-        // get the GUI context
-        let gui_ctx = self.gui.ctx();
-        // create the options window
-        egui::Window::new("Options")
-            .resizable(false)
-            .default_size([250.0, 100.0])
-            .default_pos([10.0, 100.0])
-            .show(&gui_ctx, |ui| {
-                // Display instructions
-                ui.label("Click the button to earn money!");
-                if ui.button("Convert").clicked() {
-                    self.make_money();
-                }
-                // display money
-                ui.label(format!("Money: {}$", self.money));
-
-                // show available upgrades
-                ui.separator();
-                if self.unlock.is_empty() {
-                    ui.label("No upgrades available yet. Keep clicking!");
-                } else {
-                    ui.label("Available Upgrades:");
-                }
-                for upgrade in Upgrade::iter() {
-                    let cost = self.upgrade_cost(upgrade);
-                    if self.unlock.contains(&upgrade) {
-                        ui.label(upgrade.desc());
-                        let amount = *self.upgrades.get(&upgrade).unwrap_or(&0);
-                        if !self.is_maxed(upgrade) {
-                            let enabled: bool = self.money >= cost;
-                            let btn_txt = format!("{} ({}): {}$", upgrade.btn_txt(), amount, cost);
-                            if ui.add_enabled(enabled, Button::new(btn_txt)).clicked() {
-                                self.buy(upgrade)
-                            }
-                        } else {
-                            let btn_txt =
-                                format!("{} ({}): (MAX LEVEL)", upgrade.btn_txt(), amount);
-                            ui.add_enabled(false, Button::new(btn_txt));
-                        }
-                    } else if self.money >= cost {
-                        self.unlock.insert(upgrade);
+        if let Some(gui) = &mut self.gui {
+            // get the GUI context
+            let gui_ctx = gui.ctx();
+            // create the options window
+            egui::Window::new("Options")
+                .resizable(false)
+                .default_size([250.0, 100.0])
+                .default_pos([10.0, 100.0])
+                .show(&gui_ctx, |ui| {
+                    // Display instructions
+                    ui.label("Click the button to earn money!");
+                    if ui.button("Convert").clicked() {
+                        self.make_money();
                     }
-                }
-            });
+                    // display money
+                    ui.label(format!("Money: {}$", self.money));
+
+                    // show available upgrades
+                    ui.separator();
+                    if self.unlock.is_empty() {
+                        ui.label("No upgrades available yet. Keep clicking!");
+                    } else {
+                        ui.label("Available Upgrades:");
+                    }
+                    for upgrade in Upgrade::iter() {
+                        let cost = self.upgrade_cost(upgrade);
+                        if self.unlock.contains(&upgrade) {
+                            ui.label(upgrade.desc());
+                            let amount = *self.upgrades.get(&upgrade).unwrap_or(&0);
+                            if !self.is_maxed(upgrade) {
+                                let enabled: bool = self.money >= cost;
+                                let btn_txt =
+                                    format!("{} ({}): {}$", upgrade.btn_txt(), amount, cost);
+                                if ui.add_enabled(enabled, Button::new(btn_txt)).clicked() {
+                                    self.buy(upgrade)
+                                }
+                            } else {
+                                let btn_txt =
+                                    format!("{} ({}): (MAX LEVEL)", upgrade.btn_txt(), amount);
+                                ui.add_enabled(false, Button::new(btn_txt));
+                            }
+                        } else if self.money >= cost {
+                            self.unlock.insert(upgrade);
+                        }
+                    }
+                });
+        }
     }
 
     /// adds a grain of sand at the specified (x, y) position
@@ -364,7 +388,9 @@ impl EventHandler for SandDropClicker {
 
         // update the GUI
         self.options_gui();
-        self.gui.update(ctx);
+        if let Some(gui) = &mut self.gui {
+            gui.update(ctx)
+        }
         Ok(())
     }
 
@@ -373,25 +399,29 @@ impl EventHandler for SandDropClicker {
         // clear the screen
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
-        // draw the grain particles
-        self.batch.clear();
-        if self.batch.capacity() < self.grains.len() {
-            self.batch.resize(ctx, self.grains.len());
-        }
-        for grain in &self.grains {
-            // skip drawing if the grain is done
-            if grain.is_done() {
-                continue;
+        if let Some(batch) = &mut self.batch {
+            // draw the grain particles
+            batch.clear();
+            if batch.capacity() < self.grains.len() {
+                batch.resize(ctx, self.grains.len());
             }
-            self.batch.push(grain.draw_params());
+            for grain in &self.grains {
+                // skip drawing if the grain is done
+                if grain.is_done() {
+                    continue;
+                }
+                batch.push(grain.draw_params());
+            }
+            canvas.draw(batch, DrawParam::default());
         }
-        canvas.draw(&self.batch, DrawParam::default());
 
         // draw the player stat
         self.game_info(&mut canvas);
 
         // draw the gui
-        canvas.draw(&self.gui, DrawParam::default());
+        if let Some(gui) = &self.gui {
+            canvas.draw(gui, DrawParam::default())
+        }
 
         // draw game info
         if self.show_info {
@@ -413,12 +443,15 @@ impl EventHandler for SandDropClicker {
         x: f32,
         y: f32,
     ) -> Result<(), ggez::GameError> {
-        // Ignore clicks if the pointer is over the GUI or the container is full
-        if !self.gui.ctx().wants_pointer_input() && !self.is_full() {
-            // increment total clicks
-            self.total_clicks += 1;
-            self.add_grain(x, y);
+        if let Some(gui) = &mut self.gui {
+            // Ignore clicks if the pointer is over the GUI or the container is full
+            if !gui.ctx().wants_pointer_input() && !self.is_full() {
+                // increment total clicks
+                self.total_clicks += 1;
+                self.add_grain(x, y);
+            }
         }
+
         Ok(())
     }
 
@@ -699,12 +732,95 @@ impl Grain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
+    // SandDropClicker tests
+    #[test]
+    fn test_game_add_grain() {
+        let mut game = SandDropClicker::_test_state();
+        let initial_amount = game.get_amount();
+        game.add_grain(100.0, 100.0);
+        assert_eq!(game.get_amount(), initial_amount + 1);
+    }
+    #[test]
+    fn test_game_is_full() {
+        let mut game = SandDropClicker::_test_state();
+        // fill the container
+        let size = game.get_size();
+        for _ in 0..size {
+            game.add_grain(100.0, 100.0);
+        }
+        assert!(game.is_full());
+    }
+    #[test]
+    fn test_game_get_size() {
+        let mut game = SandDropClicker::_test_state();
+        assert_eq!(game.get_size(), 25);
+        // buy bigger container upgrade
+        game.upgrades.insert(Upgrade::BiggerContainer, 2);
+        assert_eq!(game.get_size(), 75);
+    }
+    #[test]
+    fn test_game_get_amount() {
+        let mut game = SandDropClicker::_test_state();
+        game.add_grain(100.0, 100.0);
+        game.add_grain(200.0, 100.0);
+        assert_eq!(game.get_amount(), 2);
+    }
+    #[test]
+    fn test_game_make_money() {
+        let mut game = SandDropClicker::_test_state();
+        // add some grains
+        game.add_grain(100.0, 100.0);
+        game.add_grain(200.0, 100.0);
+        // convert to money
+        game.make_money();
+        assert!(game.money > 0);
+        assert_eq!(game.get_amount(), 0);
+    }
+    #[test]
+    fn test_game_buy_upgrade() {
+        let mut game = SandDropClicker::_test_state();
+        game.money = 10000;
+        game.buy(Upgrade::AutoClicker);
+        let level = *game.upgrades.get(&Upgrade::AutoClicker).unwrap();
+        assert_eq!(level, 1);
+    }
+    #[test]
+    fn test_game_is_maxed() {
+        let mut game = SandDropClicker::_test_state();
+        game.upgrades.insert(Upgrade::AutoClicker, 100);
+        assert!(game.is_maxed(Upgrade::AutoClicker));
+    }
+    #[test]
+    fn test_game_rand_sand() {
+        let mut game = SandDropClicker::_test_state();
+        game.upgrades.insert(Upgrade::ParticleTier, 5);
+        let sand = game.rand_sand();
+        match sand {
+            SandParticle::Sand
+            | SandParticle::Quartz
+            | SandParticle::Shell
+            | SandParticle::Coral
+            | SandParticle::Pinksand => {}
+            _ => panic!("Random sand particle out of range!"),
+        }
+    }
+    #[test]
+    fn test_game_upgrade_cost() {
+        let mut game = SandDropClicker::_test_state();
+        game.upgrades.insert(Upgrade::MoreParticles, 2);
+        let cost = game.upgrade_cost(Upgrade::MoreParticles);
+        assert!(cost > 0);
+    }
+
     // Upgrade tests
     #[test]
     fn test_upgrade_desc() {
         let upgrade = Upgrade::MoreParticles;
-        assert_eq!(upgrade.desc(), "This will allow you to drop more sand per click:");
+        assert_eq!(
+            upgrade.desc(),
+            "This will allow you to drop more sand per click:"
+        );
     }
     #[test]
     fn test_upgrade_btn_txt() {
