@@ -4,9 +4,29 @@
 //      A simple clicker game where you drop sand particles.
 //
 //  By:         Artem Suprun
-//  Date:       11/03/2025
+//  Date:       12/09/2025
 //  License:    Apache License 2.0
 //  Github:     https://github.com/Artemsuprun/Sand-Drop-Clicker
+
+//! # Sand Drop Clicker
+//! A simple clicker game where you drop sand particles by clicking
+//! on the screen. You can earn money by converting sand particles
+//! and use that money to buy upgrades that enhance your sand dropping
+//! capabilities. The game features different types of sand particles,
+//! each with its own value, and various upgrades to improve your
+//! sand dropping efficiency.
+
+//! ## Controls:
+//! - Click anywhere on the screen to drop sand particles.
+//! - Press `Ctrl + I` to toggle the display of player information.
+//! - Press `Ctrl + Q` to quit the game.
+
+//! ## Needed Crates:
+//! - ggez: Game framework for Rust.
+//! - ggegui: GUI library for ggez.
+//! - rand: Random number generation.
+//! - strum: Enum iteration utilities.
+//! - strum_macros: Macros for strum.
 
 // Needed imports
 // standard library for data structures and time handling
@@ -37,17 +57,32 @@ const GRAVITY: f32 = 300.0; // Gravity affecting the grains
 
 // Set up and run the game
 fn main() {
+    // create the ggez context and event loop
     let (mut ctx, event_loop) = ContextBuilder::new("SandDropClicker", "Artem Suprun")
         .window_setup(ggez::conf::WindowSetup::default().title("Sand Drop Clicker"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_SIZE.0, SCREEN_SIZE.1))
         .build()
         .unwrap();
+    // create the game state
     let state = SandDropClicker::new(&mut ctx);
+    // run the game
     event::run(ctx, event_loop, state);
 }
 
 // Main game state
 // holds the game logic and GUI
+/// game state structure
+/// * money: player's current money
+/// * particles: map of sand particles and their counts
+/// * grains: vector of grain instances
+/// * upgrades: map of upgrades and their levels
+/// * total_clicks: total number of clicks made by the player
+/// * total_time: total time spent in the game
+/// * unlock: set of unlocked upgrades
+/// * show_info: flag to show/hide player info
+/// * autoclicker_timer: timer for the autoclicker upgrade
+/// * gui: GUI instance for the game
+/// * batch: instance array for rendering grains
 struct SandDropClicker {
     money: i64,
     particles: HashMap<SandParticle, u32>,
@@ -63,6 +98,10 @@ struct SandDropClicker {
     batch: InstanceArray,
 }
 
+/// Implementation of the game logic and GUI handling
+/// for the SandDropClicker struct
+/// Contains methods for game initialization, GUI updates,
+/// sand particle management, upgrades, and event handling.
 impl SandDropClicker {
     // creates a new game state
     pub fn new(ctx: &mut Context) -> Self {
@@ -90,7 +129,9 @@ impl SandDropClicker {
 
     // loads the options window
     fn options_gui(&mut self) {
+        // get the GUI context
         let gui_ctx = self.gui.ctx();
+        // create the options window
         egui::Window::new("Options")
             .resizable(false)
             .default_size([250.0, 100.0])
@@ -179,14 +220,16 @@ impl SandDropClicker {
         // get the autoclicker level
         let autoclicker_level = *self.upgrades.get(&Upgrade::AutoClicker).unwrap_or(&0);
         if autoclicker_level > 0 && !self.is_full() {
+            // increment the timer
             self.autoclicker_timer += seconds;
             let frequency = 5.0 / autoclicker_level as f32; // clicks per second
-
+            // determine how many clicks to make
             let clicks = (self.autoclicker_timer / frequency).floor() as u32;
             for _ in 0..clicks {
                 let x = rand::random::<f32>() * SCREEN_SIZE.0;
                 let y = 0.0;
                 self.add_grain(x, y);
+                // reset the timer
                 self.autoclicker_timer = 0.0;
             }
         }
@@ -289,6 +332,9 @@ impl SandDropClicker {
     }
 }
 
+/// Event handling for the SandDropClicker game
+/// Implements the ggez EventHandler trait
+/// to handle game updates, drawing, mouse clicks, and key events.
 impl EventHandler for SandDropClicker {
     // update the game state
     fn update(&mut self, ctx: &mut Context) -> GameResult {
@@ -394,6 +440,11 @@ impl EventHandler for SandDropClicker {
     }
 }
 
+/// Different types of upgrades available in the game
+/// * BiggerContainer: Increases container size.
+/// * ParticleTier: Unlocks better sand particles.
+/// * AutoClicker: Automatically drops sand particles.
+/// * MoreParticles: Increases number of particles dropped per click.
 #[derive(Hash, Eq, PartialEq, Debug, EnumIter, Clone, Copy)]
 enum Upgrade {
     BiggerContainer, // Adds more container space.
@@ -402,6 +453,11 @@ enum Upgrade {
     MoreParticles,   // Produce more sand particles per click.
 }
 
+/// Implementation of methods for the Upgrade enum
+/// * btn_txt: returns the button text for the upgrade
+/// * desc: returns the description of the upgrade
+/// * cost: returns the cost of the upgrade based on its current level
+/// * max_level: returns the maximum level of the upgrade, if any
 impl Upgrade {
     // Button text for the upgrade
     fn btn_txt(&self) -> &str {
@@ -455,6 +511,7 @@ impl Upgrade {
     }
 }
 
+/// Different types of sand particles available in the game
 #[derive(Hash, Eq, PartialEq, Debug, EnumIter, Clone, Copy)]
 enum SandParticle {
     Sand,
@@ -471,6 +528,12 @@ enum SandParticle {
     Diamond,
 }
 
+/// Implementation of methods for the SandParticle enum
+/// * value: returns the value of the sand particle
+/// * color: returns the color of the sand particle
+/// * cost: returns the cost of the sand particle based on its level
+/// * from_u32: returns the sand particle from its level number
+/// * max_level: returns the maximum level of sand particles
 impl SandParticle {
     // returns the value of the sand particle
     fn value(&self) -> i64 {
@@ -555,6 +618,13 @@ impl SandParticle {
     }
 }
 
+/// Structure representing a grain of sand
+/// * rect: rectangle representing the grain's position and size
+/// * color: color of the grain
+/// * rotation: current rotation of the grain
+/// * r_v: rotational velocity of the grain
+/// * y_v: vertical velocity of the grain
+/// * y_a: vertical acceleration of the grain
 #[derive(Debug)]
 struct Grain {
     rect: Rect,
@@ -565,6 +635,11 @@ struct Grain {
     y_a: f32,
 }
 
+/// Implementation of methods for the Grain struct
+/// * new: creates a new grain of sand
+/// * is_done: returns true if the grain is done (on the ground)
+/// * update: updates the position of the grain based on physics
+/// * draw_params: returns the draw parameters for the grain
 impl Grain {
     // creates a new grain of sand
     fn new(x: f32, y: f32, size: f32, rgb: Color) -> Self {
@@ -613,5 +688,89 @@ impl Grain {
             .scale(self.rect.size())
             .offset([0.5, 0.5])
             .color(self.color)
+    }
+}
+
+/// Tests for SandDropClicker
+/// Contains unit tests for various components of the game.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    // Upgrade tests
+    #[test]
+    fn test_upgrade_desc() {
+        let upgrade = Upgrade::MoreParticles;
+        assert_eq!(upgrade.desc(), "This will allow you to drop more sand per click:");
+    }
+    #[test]
+    fn test_upgrade_btn_txt() {
+        let upgrade = Upgrade::AutoClicker;
+        assert_eq!(upgrade.btn_txt(), "Buy Auto Clicker");
+    }
+    #[test]
+    fn test_upgrade_cost() {
+        let upgrade = Upgrade::BiggerContainer;
+        let base_m: f64 = 1.1;
+        let base_cost: f64 = 50.0;
+        let m: f64 = 100.0;
+        let cost_level_100 = base_cost * base_m.powf(m);
+        assert_eq!(upgrade.cost(0), 50.0);
+        assert_eq!(upgrade.cost(100), cost_level_100);
+    }
+    #[test]
+    fn test_upgrade_max_level() {
+        let upgrade = Upgrade::ParticleTier;
+        assert_eq!(upgrade.max_level(), Some(SandParticle::max_level()));
+    }
+
+    // SandParticle tests
+    #[test]
+    fn test_sand_particle_color() {
+        let particle = SandParticle::Coral;
+        assert_eq!(particle.color(), Color::from_rgb(248, 131, 121));
+    }
+    #[test]
+    fn test_sand_particle_value() {
+        let particle = SandParticle::Gold;
+        assert_eq!(particle.value(), 1024);
+    }
+    #[test]
+    fn test_sand_particle_cost() {
+        assert_eq!(SandParticle::cost(0), 0);
+        assert_eq!(SandParticle::cost(1), 100);
+        assert_eq!(SandParticle::cost(11), 10000000);
+    }
+    #[test]
+    fn test_sand_particle_from_u32() {
+        assert_eq!(SandParticle::from_u32(0), Some(SandParticle::Sand));
+        assert_eq!(SandParticle::from_u32(5), Some(SandParticle::Volcanic));
+        assert_eq!(SandParticle::from_u32(12), None);
+    }
+    #[test]
+    fn test_sand_particle_max_level() {
+        assert_eq!(SandParticle::max_level(), 12);
+    }
+
+    // Grain tests
+    #[test]
+    fn test_grain_new() {
+        let grain = Grain::new(100.0, 200.0, GRAIN_SIZE, Color::WHITE);
+        assert_eq!(grain.rect.x, 100.0 - GRAIN_SIZE / 2.0);
+        assert_eq!(grain.rect.y, 200.0 - GRAIN_SIZE / 2.0);
+        assert_eq!(grain.rect.w, GRAIN_SIZE);
+        assert_eq!(grain.rect.h, GRAIN_SIZE);
+        assert_eq!(grain.color, Color::WHITE);
+    }
+    #[test]
+    fn test_grain_is_done() {
+        let grain = Grain::new(0.0, SCREEN_SIZE.1 + 10.0, GRAIN_SIZE, Color::WHITE);
+        assert!(grain.is_done());
+    }
+    #[test]
+    fn test_grain_update() {
+        let mut grain = Grain::new(0.0, 0.0, GRAIN_SIZE, Color::WHITE);
+        grain.update(1.0);
+        assert!(grain.rect.y > 0.0);
     }
 }
