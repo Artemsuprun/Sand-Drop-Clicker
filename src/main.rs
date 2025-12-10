@@ -55,7 +55,7 @@ const SCREEN_SIZE: (f32, f32) = (800.0, 600.0); // Screen dimensions
 const GRAIN_SIZE: f32 = 10.0; // Size of each grain of sand
 const GRAVITY: f32 = 300.0; // Gravity affecting the grains
 
-// Set up and run the game
+/// Set up and run the game
 fn main() {
     // create the ggez context and event loop
     let (mut ctx, event_loop) = ContextBuilder::new("SandDropClicker", "Artem Suprun")
@@ -103,7 +103,8 @@ struct SandDropClicker {
 /// Contains methods for game initialization, GUI updates,
 /// sand particle management, upgrades, and event handling.
 impl SandDropClicker {
-    // creates a new game state
+    /// creates a new game state
+    /// initializes default values
     pub fn new(ctx: &mut Context) -> Self {
         // provide the game with the default upgrades
         let mut upgrades_map = HashMap::new();
@@ -127,7 +128,8 @@ impl SandDropClicker {
         }
     }
 
-    // loads the options window
+    /// updates the options GUI
+    /// displays money, upgrades, and instructions
     fn options_gui(&mut self) {
         // get the GUI context
         let gui_ctx = self.gui.ctx();
@@ -175,7 +177,8 @@ impl SandDropClicker {
             });
     }
 
-    // simulates dropping a sand particle
+    /// adds a grain of sand at the specified (x, y) position
+    /// takes into account upgrades for multiple grains
     fn add_grain(&mut self, x: f32, y: f32) {
         // for multiple grains spawning
         let amount = 1 + *self.upgrades.get(&Upgrade::MoreParticles).unwrap_or(&0);
@@ -215,7 +218,7 @@ impl SandDropClicker {
         }
     }
 
-    // simulates the autoclicker upgrade
+    /// autoclicker upgrade functionality
     fn autoclicker(&mut self, seconds: f32) {
         // get the autoclicker level
         let autoclicker_level = *self.upgrades.get(&Upgrade::AutoClicker).unwrap_or(&0);
@@ -235,7 +238,7 @@ impl SandDropClicker {
         }
     }
 
-    // converts sand particles to money
+    /// converts all sand particles into money
     fn make_money(&mut self) {
         // sell all sand particles for money
         let mut earned = 0;
@@ -250,7 +253,7 @@ impl SandDropClicker {
         self.grains.clear();
     }
 
-    // returns true if the container is full
+    /// checks if the container is full
     fn is_full(&self) -> bool {
         // container size
         let size = self.get_size();
@@ -258,7 +261,7 @@ impl SandDropClicker {
         amount >= size
     }
 
-    // returns the size of the container
+    /// returns the size of the container based on upgrades
     fn get_size(&self) -> u32 {
         // base container size
         let base_size = 25;
@@ -268,13 +271,13 @@ impl SandDropClicker {
         base_size * upgrade
     }
 
-    // returns the amount of particles in the container
+    /// returns the current amount of particles in the container
     fn get_amount(&self) -> u32 {
         // count the amount of particles in the container
         self.grains.len() as u32
     }
 
-    // draws the game info on the screen
+    /// draws the game info on the screen
     fn game_info(&self, canvas: &mut graphics::Canvas) {
         let money = self.money;
         let size = self.get_size();
@@ -283,7 +286,7 @@ impl SandDropClicker {
         canvas.draw(&txt, DrawParam::from([10.0, 10.0]).color(Color::WHITE));
     }
 
-    // draws the player info on the screen
+    /// draws the player info on the screen
     fn player_info(&self, canvas: &mut graphics::Canvas) {
         let total_time = self.total_time.as_secs();
         let total_clicks = self.total_clicks;
@@ -294,21 +297,21 @@ impl SandDropClicker {
         canvas.draw(&txt, DrawParam::from([10.0, 50.0]).color(Color::WHITE));
     }
 
-    // returns the cost of the upgrade
+    /// returns the cost of the specified upgrade
     fn upgrade_cost(&self, upgrade: Upgrade) -> i64 {
         let n = *self.upgrades.get(&upgrade).unwrap_or(&0);
         let cost: f64 = upgrade.cost(n);
         cost.round() as i64
     }
 
-    // returns a random sand particle based on the current upgrade level
+    /// returns a random sand particle based on the ParticleTier upgrade level
     fn rand_sand(&self) -> SandParticle {
         let level = *self.upgrades.get(&Upgrade::ParticleTier).unwrap_or(&0);
         let sand_level = rand::random::<u32>() % (level);
         SandParticle::from_u32(sand_level).unwrap_or(SandParticle::Sand)
     }
 
-    // buys the upgrade if the player has enough money
+    /// buys the specified upgrade if affordable and not maxed out
     fn buy(&mut self, upgrade: Upgrade) {
         let cost = self.upgrade_cost(upgrade);
         if self.money >= cost && !self.is_maxed(upgrade) {
@@ -320,7 +323,7 @@ impl SandDropClicker {
         }
     }
 
-    // returns true if the upgrade is maxed out
+    /// checks if the specified upgrade is maxed out
     fn is_maxed(&self, upgrade: Upgrade) -> bool {
         match upgrade.max_level() {
             Some(max) => {
@@ -336,7 +339,7 @@ impl SandDropClicker {
 /// Implements the ggez EventHandler trait
 /// to handle game updates, drawing, mouse clicks, and key events.
 impl EventHandler for SandDropClicker {
-    // update the game state
+    /// updates the game state
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         // set up a fixed timestep for the physics of the grains
         while ctx.time.check_update_time(FPS) {
@@ -365,7 +368,7 @@ impl EventHandler for SandDropClicker {
         Ok(())
     }
 
-    // draw the game state
+    /// draws the game state
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // clear the screen
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
@@ -400,9 +403,9 @@ impl EventHandler for SandDropClicker {
         Ok(())
     }
 
-    // handle mouse clicks
-    // if the pointer is over the GUI, ignore the click
-    // otherwise, drop a grain of sand.
+    /// handle mouse clicks
+    /// if the pointer is over the GUI, ignore the click
+    /// otherwise, drop a grain of sand.
     fn mouse_button_down_event(
         &mut self,
         _ctx: &mut Context,
@@ -419,9 +422,9 @@ impl EventHandler for SandDropClicker {
         Ok(())
     }
 
-    // handle key down events
-    // Ctrl+I to toggle info display
-    // Ctrl+Q to quit the game
+    /// handle key down events
+    /// Ctrl+I to toggle info display
+    /// Ctrl+Q to quit the game
     fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         match input.keycode {
             Some(KeyCode::I) => {
@@ -459,7 +462,7 @@ enum Upgrade {
 /// * cost: returns the cost of the upgrade based on its current level
 /// * max_level: returns the maximum level of the upgrade, if any
 impl Upgrade {
-    // Button text for the upgrade
+    /// returns the button text for the upgrade
     fn btn_txt(&self) -> &str {
         match self {
             Upgrade::BiggerContainer => "Buy Bigger Container",
@@ -469,7 +472,7 @@ impl Upgrade {
         }
     }
 
-    // Description for the upgrade
+    /// returns the description of the upgrade
     fn desc(&self) -> &str {
         match self {
             Upgrade::BiggerContainer => "This will increase your container size:",
@@ -479,7 +482,7 @@ impl Upgrade {
         }
     }
 
-    // returns the cost of the upgrade based on the current level
+    /// returns the cost of the upgrade based on its current level
     fn cost(&self, n: u32) -> f64 {
         // formula: upgrade_base_cost * 1.1^m
         let m: f64 = n as f64;
@@ -500,7 +503,7 @@ impl Upgrade {
         }
     }
 
-    // returns the maximum level of the upgrade, if any
+    /// returns the maximum level of the upgrade, if any
     fn max_level(&self) -> Option<u32> {
         match self {
             Upgrade::ParticleTier => Some(SandParticle::max_level()),
@@ -535,7 +538,7 @@ enum SandParticle {
 /// * from_u32: returns the sand particle from its level number
 /// * max_level: returns the maximum level of sand particles
 impl SandParticle {
-    // returns the value of the sand particle
+    /// returns the value of the sand particle
     fn value(&self) -> i64 {
         match self {
             SandParticle::Sand => 1,
@@ -553,7 +556,7 @@ impl SandParticle {
         }
     }
 
-    // returns the color of the sand particle
+    /// returns the color of the sand particle
     fn color(&self) -> Color {
         match self {
             SandParticle::Sand => Color::from_rgb(243, 213, 103),
@@ -571,7 +574,7 @@ impl SandParticle {
         }
     }
 
-    // returns the cost of the sand particle based on its level
+    /// returns the cost of the sand particle based on its level
     fn cost(num: u32) -> i64 {
         let particle = SandParticle::from_u32(num);
         match particle {
@@ -593,7 +596,7 @@ impl SandParticle {
         }
     }
 
-    // returns the sand particle from its level number
+    /// returns the sand particle from its level number
     fn from_u32(num: u32) -> Option<Self> {
         match num {
             0 => Some(SandParticle::Sand),
@@ -612,7 +615,7 @@ impl SandParticle {
         }
     }
 
-    // returns the maximum level of sand particles
+    /// returns the maximum level of sand particles
     fn max_level() -> u32 {
         SandParticle::iter().count() as u32
     }
@@ -641,7 +644,7 @@ struct Grain {
 /// * update: updates the position of the grain based on physics
 /// * draw_params: returns the draw parameters for the grain
 impl Grain {
-    // creates a new grain of sand
+    /// creates a new grain of sand
     fn new(x: f32, y: f32, size: f32, rgb: Color) -> Self {
         let grain_rect = Rect::new(x - size / 2.0, y - size / 2.0, size, size);
 
@@ -655,12 +658,12 @@ impl Grain {
         }
     }
 
-    // returns true if the grain is done (on the ground)
+    /// returns true if the grain is done (on the ground)
     fn is_done(&self) -> bool {
         self.rect.bottom() >= SCREEN_SIZE.1 && self.y_v <= 0.1
     }
 
-    // updates the position of the grain based on physics
+    /// updates the position of the grain based on physics
     fn update(&mut self, dt: f32) {
         // put the physics to sleep if on the ground
         if self.is_done() {
@@ -680,7 +683,7 @@ impl Grain {
         }
     }
 
-    // returns the draw parameters for the grain
+    /// returns the draw parameters for the grain
     fn draw_params(&self) -> DrawParam {
         DrawParam::default()
             .dest(self.rect.center())
