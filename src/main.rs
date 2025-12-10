@@ -794,15 +794,17 @@ mod tests {
     #[test]
     fn test_game_rand_sand() {
         let mut game = SandDropClicker::_test_state();
-        game.upgrades.insert(Upgrade::ParticleTier, 5);
-        let sand = game.rand_sand();
-        match sand {
-            SandParticle::Sand
-            | SandParticle::Quartz
-            | SandParticle::Shell
-            | SandParticle::Coral
-            | SandParticle::Pinksand => {}
-            _ => panic!("Random sand particle out of range!"),
+        for _ in 0..100 {
+            game.upgrades.insert(Upgrade::ParticleTier, 5);
+            let sand = game.rand_sand();
+            match sand {
+                SandParticle::Sand
+                | SandParticle::Quartz
+                | SandParticle::Shell
+                | SandParticle::Coral
+                | SandParticle::Pinksand => {}
+                _ => panic!("Random sand particle out of range!"),
+            }
         }
     }
     #[test]
